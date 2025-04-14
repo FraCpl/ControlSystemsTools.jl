@@ -4,7 +4,7 @@ using ControlSystems
 using RobustAndOptimalControl
 using GLMakie
 
-export mag2db, db2mag, connectAuto
+export mag2db, db2mag, connectAuto, connectAnalysis
 export nichols!, nicholsAxis
 
 mag2db(x) = 20log10(x)
@@ -20,6 +20,7 @@ end
 
 function nichols!(ax, sys, w; phaseBias::Int=0, kwargs...)
     mag, phase, w = bode(sys, w)
+    if phase[1] > -30; phaseBias -= 1; end
     lines!(ax, phase[:] .+ phaseBias*360.0, mag2db.(mag[:]); kwargs...)
 end
 
@@ -29,10 +30,10 @@ function nichols!(ax, sys; phaseBias::Int=0, kwargs...)
     nichols!(ax, sys, w; phaseBias=phaseBias, kwargs...)
 end
 
-function nicholsAxis(f; center::Int=-1)
+function nicholsAxis(f; center::Int=-1, kwargs...)
     ct = 360*center + 180
     ax = Axis(f; limits=(ct - 180, ct + 180, -40, 40), xgridvisible=false, ygridvisible=false,
-        xlabel="Open-Loop Phase [deg]", ylabel="Open-Loop Gain [dB]", title="Nichols Chart")
+        xlabel="Open-Loop Phase [deg]", ylabel="Open-Loop Gain [dB]", title="Nichols Chart", kwargs...)
     phase = range(1, 359, 1000)*π/180;
 
     for mag in [6; 3; 2; 1; 0.5; 0; -0.5; -1; -2; -3; -6; -9; -12; -15; -20; -25; -30; -40; -50; -60]
@@ -93,4 +94,28 @@ function connectAuto(SYS)
     return connect(SYS, connections; w1=ins, unique=false)
 end
 
+end
+
+# This generates an open loop transfer function at the analysis point "u".
+function connectAnalysis(SYS, u)
+    u_IN = Symbol("$(String(u))_IN")
+    u_OUT = Symbol("$(String(u))_OUT")
+
+    # Replace inputs and outputs
+    sys = deepcopy(SYS)
+    for j in eachindex(sys)
+        for i in eachindex(sys[j].u)
+            if sys[j].u[i] == u
+                sys[j].u[i] = u_IN
+                sys[j].B[:, i] = -sys[j].B[:, i]    # Change sign [TODO: why?]
+                sys[j].D[:, i] = -sys[j].D[:, i]    # Change sign [TODO: why?]
+            end
+        end
+        for i in eachindex(sys[j].y)
+            if sys[j].y[i] == u
+                sys[j].y[i] = u_OUT
+            end
+        end
+    end
+    return connectAuto(sys, u_IN, u_OUT)
 end

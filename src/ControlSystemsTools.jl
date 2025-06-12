@@ -1,11 +1,12 @@
 module ControlSystemsTools
 
 using ControlSystems
-using RobustAndOptimalControl
+using RobustAndOptimalControl: connect, named_ss
 using GLMakie
 
 export mag2db, db2mag, connectAuto, connectAnalysis
 export nichols!, nicholsAxis
+export removeState
 
 mag2db(x) = 20log10(x)
 db2mag(x) = 10^(x/20)
@@ -58,7 +59,6 @@ function nicholsAxis(f; center::Int=-1, kwargs...)
         lines!(ax, ph*180/pi .+ 360.0.*(ph .≤ 0.0) .+ (ct - 180), mg, linewidth=0.5, color=:grey, linestyle=:dash)
         lines!(ax, ph*180/pi .+ 360.0.*(ph .≤ 0.0) .+ (ct + 360 - 180), mg, linewidth=0.5, color=:grey, linestyle=:dash)
         lines!(ax, ph*180/pi .+ 360.0.*(ph .≤ 0.0) .+ (ct - 360 - 180), mg, linewidth=0.5, color=:grey, linestyle=:dash)
-
     end
     scatter!(ax, ct, 0, marker=:cross, color=:grey, markersize=8)
     return ax
@@ -90,32 +90,55 @@ function connectAuto(SYS)
             push!(ins, i)
         end
     end
-
     return connect(SYS, connections; w1=ins, unique=false)
 end
 
-end
-
-# This generates an open loop transfer function at the analysis point "u".
-function connectAnalysis(SYS, u)
-    u_IN = Symbol("$(String(u))_IN")
-    u_OUT = Symbol("$(String(u))_OUT")
+# This generates an open loop transfer function at the analysis point "u", assuming a
+# negative feedback by default.
+connectAnalysis(SYS, u::Symbol, sign=-1.0) = connectAnalysis(SYS, [u], sign)
+function connectAnalysis(SYS, u::Vector{Symbol}, sign=-1.0)
+    sys = deepcopy(SYS)
+    u_IN = Symbol.(String.(u).*"_IN")
+    u_OUT = Symbol.(String.(u).*"_OUT")
 
     # Replace inputs and outputs
-    sys = deepcopy(SYS)
-    for j in eachindex(sys)
-        for i in eachindex(sys[j].u)
-            if sys[j].u[i] == u
-                sys[j].u[i] = u_IN
-                sys[j].B[:, i] = -sys[j].B[:, i]    # Change sign [TODO: why?]
-                sys[j].D[:, i] = -sys[j].D[:, i]    # Change sign [TODO: why?]
+    for k in eachindex(u)
+        for j in eachindex(sys)
+            for i in eachindex(sys[j].u)
+                if sys[j].u[i] == u[k]
+                    sys[j].u[i] = u_IN[k]
+                    sys[j].B[:, i] = sign*sys[j].B[:, i]
+                    sys[j].D[:, i] = sign*sys[j].D[:, i]
+                end
             end
-        end
-        for i in eachindex(sys[j].y)
-            if sys[j].y[i] == u
-                sys[j].y[i] = u_OUT
+            for i in eachindex(sys[j].y)
+                if sys[j].y[i] == u[k]
+                    sys[j].y[i] = u_OUT[k]
+                end
             end
         end
     end
     return connectAuto(sys, u_IN, u_OUT)
+end
+
+
+function removeState(G, xRem::Vector{Symbol})
+    Gr = removeState(G, xRem[1])
+    for i in 2:lastindex(xRem)
+        Gr = removeState(Gr, xRem[i])
+    end
+    return Gr
+end
+
+function removeState(G, xRem::Symbol)
+    x = copy(G.x)
+    A = copy(G.A); B = copy(G.B); C = copy(G.C)
+    id = findfirst(x .== xRem)
+    A = A[1:end .!= id, 1:end .!= id]
+    B = B[1:end .!= id, :]
+    C = C[:, 1:end .!= id]
+    x = x[1:end .!= id]
+    return named_ss(ss(A, B, C, G.D), x=x, y=G.y, u=G.u)
+end
+
 end

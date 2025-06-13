@@ -1,21 +1,4 @@
-name = "ControlSystemsTools"
-uuid = "66f4a95a-6313-4021-884f-42827225fcdd"
-authors = ["F. Capolupo"]
-version = "0.1.0"
-
 [deps]
 ControlSystems = "a6e380b2-a6ca-5380-bf3e-84a91bcd477e"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 RobustAndOptimalControl = "21fd56a4-db03-40ee-82ee-a87907bee541"
-
-[compat]
-ControlSystems = "1.13.0"
-GLMakie = "0.12.0"
-RobustAndOptimalControl = "0.4.40"
-julia = "1.10"
-
-[extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[targets]
-test = ["Test"]
